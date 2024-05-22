@@ -22,7 +22,7 @@
 
 Name: corosync
 Summary: The Corosync Cluster Engine and Application Programming Interfaces
-Version: 3.1.7
+Version: 3.1.8
 Release: 1%{?gitver}%{?dist}
 License: BSD
 URL: http://corosync.github.io/corosync/
@@ -389,6 +389,11 @@ fi
 %endif
 
 %changelog
+* Wed Nov 15 2023 Jan Friesse <jfriesse@redhat.com> - 3.1.8-1
+- Resolves: RHEL-15263
+
+- New upstream release (RHEL-15263)
+
 * Tue Nov 15 2022 Jan Friesse <jfriesse@redhat.com> 3.1.7-1
 - Resolves: rhbz#2135860
 
