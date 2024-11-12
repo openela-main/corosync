@@ -1,0 +1,246 @@
+From ce03c68394517ea8782a03968e2507a1096e9efe Mon Sep 17 00:00:00 2001
+From: Christine Caulfield <ccaulfie@redhat.com>
+Date: Wed, 31 Jan 2024 10:29:05 +0000
+Subject: [PATCH 1/3] Report crypto errors back to cfg reload
+
+Because crypto changing happens in the 'commit' phase
+of the reload and we can't get sure that knet will
+allow the new parameters, the result gets ignored.
+This can happen in FIPS mode if a non-FIPS cipher
+is requested.
+
+This patch reports the errors back in a cmap key
+so that the command-line can spot those errors
+and report them back to the user.
+
+It also restores the internal values for crypto
+so that subsequent attempts to change things have
+predictable results. Otherwise further attempts can
+do nothing but not report any errors back.
+
+I've also added some error reporting back for the
+knet ping counters using this mechanism.
+
+The alternative to all of this would be to check for FIPS
+in totemconfig.c and then exclude certain options, but this
+would be duplicating code that could easily get out of sync.
+
+This system could also be a useful mechanism for reporting
+back other 'impossible' errors.
+
+Signed-off-by: Christine Caulfield <ccaulfie@redhat.com>
+Reviewed-by: Jan Friesse <jfriesse@redhat.com>
+---
+ exec/cfg.c               |  3 +++
+ exec/totemconfig.c       |  8 ++++++-
+ exec/totemknet.c         | 48 +++++++++++++++++++++++++++++++++++-----
+ tools/corosync-cfgtool.c | 31 ++++++++++++++++++++++++++
+ 4 files changed, 83 insertions(+), 7 deletions(-)
+
+diff --git a/exec/cfg.c b/exec/cfg.c
+index fe5f551d..4a3834b0 100644
+--- a/exec/cfg.c
++++ b/exec/cfg.c
+@@ -722,6 +722,9 @@ static void message_handler_req_exec_cfg_reload_config (
+ 
+ 	log_printf(LOGSYS_LEVEL_NOTICE, "Config reload requested by node " CS_PRI_NODE_ID, nodeid);
+ 
++	// Clear this out in case it all goes well
++	icmap_delete("config.reload_error_message");
++
+ 	icmap_set_uint8("config.totemconfig_reload_in_progress", 1);
+ 
+ 	/* Make sure there is no rubbish in this that might be checked, even on error */
+diff --git a/exec/totemconfig.c b/exec/totemconfig.c
+index a6394a2f..505424e3 100644
+--- a/exec/totemconfig.c
++++ b/exec/totemconfig.c
+@@ -2439,7 +2439,13 @@ int totemconfig_commit_new_params(
+ 	totempg_reconfigure();
+ 
+ 	free(new_interfaces);
+-	return res; /* On a reload this is ignored */
++
++	/*
++	 * On a reload this return is ignored because it's too late to do anything about it,
++	 * but errors are reported back via cmap.
++	 */
++	return res;
++
+ }
+ 
+ static void add_totem_config_notification(struct totem_config *totem_config)
+diff --git a/exec/totemknet.c b/exec/totemknet.c
+index f280a094..916f4f8b 100644
+--- a/exec/totemknet.c
++++ b/exec/totemknet.c
+@@ -93,6 +93,8 @@ static int setup_nozzle(void *knet_context);
+ struct totemknet_instance {
+ 	struct crypto_instance *crypto_inst;
+ 
++	struct knet_handle_crypto_cfg last_good_crypto_cfg;
++
+ 	qb_loop_t *poll_handle;
+ 
+         knet_handle_t knet_handle;
+@@ -995,6 +997,7 @@ static void totemknet_refresh_config(
+ 	}
+ 
+ 	for (i=0; i<num_nodes; i++) {
++		int linkerr = 0;
+ 		for (link_no = 0; link_no < INTERFACE_MAX; link_no++) {
+ 			if (host_ids[i] == instance->our_nodeid || !instance->totem_config->interfaces[link_no].configured) {
+ 				continue;
+@@ -1006,19 +1009,25 @@ static void totemknet_refresh_config(
+ 							instance->totem_config->interfaces[link_no].knet_ping_precision);
+ 			if (err) {
+ 				KNET_LOGSYS_PERROR(errno, LOGSYS_LEVEL_ERROR, "knet_link_set_ping_timers for node " CS_PRI_NODE_ID " link %d failed", host_ids[i], link_no);
++				linkerr = err;
+ 			}
+ 			err = knet_link_set_pong_count(instance->knet_handle, host_ids[i], link_no,
+ 						       instance->totem_config->interfaces[link_no].knet_pong_count);
+ 			if (err) {
+ 				KNET_LOGSYS_PERROR(errno, LOGSYS_LEVEL_ERROR, "knet_link_set_pong_count for node " CS_PRI_NODE_ID " link %d failed",host_ids[i], link_no);
++				linkerr = err;
+ 			}
+ 			err = knet_link_set_priority(instance->knet_handle, host_ids[i], link_no,
+ 						     instance->totem_config->interfaces[link_no].knet_link_priority);
+ 			if (err) {
+ 				KNET_LOGSYS_PERROR(errno, LOGSYS_LEVEL_ERROR, "knet_link_set_priority for node " CS_PRI_NODE_ID " link %d failed", host_ids[i], link_no);
++				linkerr = err;
+ 			}
+ 
+ 		}
++		if (linkerr) {
++			icmap_set_string("config.reload_error_message", "Failed to set knet ping timers(2)");
++		}
+ 	}
+ 
+ 	/* Log levels get reconfigured from logconfig.c as that happens last in the reload */
+@@ -1086,6 +1095,10 @@ static int totemknet_set_knet_crypto(struct totemknet_instance *instance)
+ 
+ 	/* use_config will be called later when all nodes are synced */
+ 	res = knet_handle_crypto_set_config(instance->knet_handle, &crypto_cfg, instance->totem_config->crypto_index);
++	if (res == 0) {
++		/* Keep a copy in case it fails in future */
++		memcpy(&instance->last_good_crypto_cfg, &crypto_cfg, sizeof(crypto_cfg));
++	}
+ 	if (res == -1) {
+ 		knet_log_printf(LOGSYS_LEVEL_ERROR, "knet_handle_crypto_set_config (index %d) failed: %s", instance->totem_config->crypto_index, strerror(errno));
+ 		goto exit_error;
+@@ -1112,8 +1125,24 @@ static int totemknet_set_knet_crypto(struct totemknet_instance *instance)
+ 	}
+ #endif
+ 
+-
+ exit_error:
++#ifdef HAVE_KNET_CRYPTO_RECONF
++	if (res) {
++		icmap_set_string("config.reload_error_message", "Failed to set crypto parameters");
++
++		/* Restore the old values in cmap & totem_config */
++		icmap_set_string("totem.crypto_cipher", instance->last_good_crypto_cfg.crypto_cipher_type);
++		icmap_set_string("totem.crypto_hash",  instance->last_good_crypto_cfg.crypto_hash_type);
++		icmap_set_string("totem.crypto_model",  instance->last_good_crypto_cfg.crypto_model);
++
++		memcpy(instance->totem_config->crypto_hash_type, instance->last_good_crypto_cfg.crypto_hash_type,
++		       sizeof(instance->last_good_crypto_cfg.crypto_hash_type));
++		memcpy(instance->totem_config->crypto_cipher_type, instance->last_good_crypto_cfg.crypto_cipher_type,
++		       sizeof(instance->last_good_crypto_cfg.crypto_cipher_type));
++		memcpy(instance->totem_config->crypto_model, instance->last_good_crypto_cfg.crypto_model,
++		       sizeof(instance->last_good_crypto_cfg.crypto_model));
++	}
++#endif
+ 	return res;
+ }
+ 
+@@ -1656,6 +1685,9 @@ int totemknet_member_add (
+ 			log_flush_messages(instance);
+ 			errno = saved_errno;
+ 			KNET_LOGSYS_PERROR(errno, LOGSYS_LEVEL_ERROR, "knet_link_set_ping_timers for nodeid " CS_PRI_NODE_ID ", link %d failed", member->nodeid, link_no);
++
++			icmap_set_string("config.reload_error_message", "Failed to set knet ping timers");
++
+ 			return -1;
+ 		}
+ 		err = knet_link_set_pong_count(instance->knet_handle, member->nodeid, link_no,
+@@ -1666,6 +1698,7 @@ int totemknet_member_add (
+ 			log_flush_messages(instance);
+ 			errno = saved_errno;
+ 			KNET_LOGSYS_PERROR(errno, LOGSYS_LEVEL_ERROR, "knet_link_set_pong_count for nodeid " CS_PRI_NODE_ID ", link %d failed", member->nodeid, link_no);
++			icmap_set_string("config.reload_error_message", "Failed to set knet pong count");
+ 			return -1;
+ 		}
+ 	}
+@@ -1774,11 +1807,14 @@ int totemknet_reconfigure (
+ 		/* Flip crypto_index */
+ 		totem_config->crypto_index = 3-totem_config->crypto_index;
+ 		res = totemknet_set_knet_crypto(instance);
+-
+-		knet_log_printf(LOG_INFO, "kronosnet crypto reconfigured on index %d: %s/%s/%s", totem_config->crypto_index,
+-				totem_config->crypto_model,
+-				totem_config->crypto_cipher_type,
+-				totem_config->crypto_hash_type);
++		if (res == 0) {
++			knet_log_printf(LOG_INFO, "kronosnet crypto reconfigured on index %d: %s/%s/%s", totem_config->crypto_index,
++					totem_config->crypto_model,
++					totem_config->crypto_cipher_type,
++					totem_config->crypto_hash_type);
++		} else {
++			icmap_set_string("config.reload_error_message", "Failed to set knet crypto");
++		}
+ 	}
+ 	return (res);
+ }
+diff --git a/tools/corosync-cfgtool.c b/tools/corosync-cfgtool.c
+index d04d5bea..d35f6d90 100644
+--- a/tools/corosync-cfgtool.c
++++ b/tools/corosync-cfgtool.c
+@@ -332,6 +332,33 @@ nodestatusget_do (enum user_action action, int brief)
+ 	return rc;
+ }
+ 
++
++static int check_for_reload_errors(void)
++{
++	cmap_handle_t cmap_handle;
++	cs_error_t result;
++	char *str;
++	int res;
++
++	result = cmap_initialize (&cmap_handle);
++	if (result != CS_OK) {
++		fprintf (stderr, "Could not initialize corosync cmap API error %d\n", result);
++		exit (EXIT_FAILURE);
++	}
++
++	result = cmap_get_string(cmap_handle, "config.reload_error_message", &str);
++	if (result == CS_OK) {
++		printf("ERROR from reload: %s - see syslog for more information\n", str);
++		free(str);
++		res = 1;
++	}
++	else {
++		res = 0;
++	}
++	cmap_finalize(cmap_handle);
++	return res;
++}
++
+ static int reload_config_do (void)
+ {
+ 	cs_error_t result;
+@@ -358,6 +385,10 @@ static int reload_config_do (void)
+ 
+ 	(void)corosync_cfg_finalize (handle);
+ 
++	if ((rc = check_for_reload_errors())) {
++		fprintf(stderr, "Errors in appying config, corosync.conf might not match the running system\n");
++	}
++
+ 	return (rc);
+ }
+ 
+-- 
+2.39.3
+

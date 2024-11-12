@@ -18,10 +18,12 @@
 Name: corosync
 Summary: The Corosync Cluster Engine and Application Programming Interfaces
 Version: 3.1.8
-Release: 1%{?gitver}%{?dist}
+Release: 2%{?gitver}%{?dist}
 License: BSD
 URL: http://corosync.github.io/corosync/
 Source0: http://build.clusterlabs.org/corosync/releases/%{name}-%{version}%{?gittarver}.tar.gz
+
+Patch0: RHEL-24163-1-Report-crypto-errors-back-to-cfg-reload.patch
 
 # Runtime bits
 # The automatic dependency overridden in favor of explicit version lock
@@ -71,6 +73,8 @@ BuildRequires: make
 
 %prep
 %setup -q -n %{name}-%{version}%{?gittarver}
+
+%patch0 -p1 -b .RHEL-24163-1
 
 %build
 %if %{with runautogen}
@@ -289,6 +293,11 @@ network splits)
 %endif
 
 %changelog
+* Tue May 21 2024 Jan Friesse <jfriesse@redhat.com> - 3.1.8-2
+- Resolves: RHEL-24163
+
+- Report crypto errors back to cfg reload (RHEL-24163)
+
 * Wed Nov 15 2023 Jan Friesse <jfriesse@redhat.com> - 3.1.8-1
 - Resolves: RHEL-15264
 
