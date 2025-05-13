@@ -12,18 +12,15 @@
 %bcond_without runautogen
 %bcond_without userflags
 
-%global gitver %{?numcomm:.%{numcomm}}%{?alphatag:.%{alphatag}}%{?dirty:.%{dirty}}
-%global gittarver %{?numcomm:.%{numcomm}}%{?alphatag:-%{alphatag}}%{?dirty:-%{dirty}}
-
 Name: corosync
 Summary: The Corosync Cluster Engine and Application Programming Interfaces
-Version: 3.1.8
-Release: 2%{?gitver}%{?dist}
+Version: 3.1.9
+Release: 2%{?dist}
 License: BSD
 URL: http://corosync.github.io/corosync/
-Source0: http://build.clusterlabs.org/corosync/releases/%{name}-%{version}%{?gittarver}.tar.gz
+Source0: http://build.clusterlabs.org/corosync/releases/%{name}-%{version}.tar.gz
 
-Patch0: RHEL-24163-1-Report-crypto-errors-back-to-cfg-reload.patch
+Patch0: RHEL-84616-totemsrp-Check-size-of-orf_token-msg.patch
 
 # Runtime bits
 # The automatic dependency overridden in favor of explicit version lock
@@ -70,11 +67,10 @@ Requires: libxslt
 BuildRequires: readline-devel
 %endif
 BuildRequires: make
+BuildRequires: git
 
 %prep
-%setup -q -n %{name}-%{version}%{?gittarver}
-
-%patch0 -p1 -b .RHEL-24163-1
+%autosetup -S git_am
 
 %build
 %if %{with runautogen}
@@ -120,7 +116,7 @@ BuildRequires: make
 
 %if %{with dbus}
 mkdir -p -m 0700 %{buildroot}/%{_sysconfdir}/dbus-1/system.d
-install -m 644 %{_builddir}/%{name}-%{version}%{?gittarver}/conf/corosync-signals.conf %{buildroot}/%{_sysconfdir}/dbus-1/system.d/corosync-signals.conf
+install -m 644 %{_builddir}/%{name}-%{version}/conf/corosync-signals.conf %{buildroot}/%{_datadir}/dbus-1/system.d/corosync-signals.conf
 %endif
 
 ## tree fixup
@@ -189,7 +185,7 @@ fi
 %config(noreplace) %{_sysconfdir}/sysconfig/corosync
 %config(noreplace) %{_sysconfdir}/logrotate.d/corosync
 %if %{with dbus}
-%{_sysconfdir}/dbus-1/system.d/corosync-signals.conf
+%{_datadir}/dbus-1/system.d/corosync-signals.conf
 %endif
 %if %{with snmp}
 %{_datadir}/snmp/mibs/COROSYNC-MIB.txt
@@ -293,6 +289,16 @@ network splits)
 %endif
 
 %changelog
+* Wed Mar 26 2025 Jan Friesse <jfriesse@redhat.com> - 3.1.9-2
+- Resolves: RHEL-84616
+
+- totemsrp: Check size of orf_token msg (fixes CVE-2025-30472)
+
+* Fri Nov 15 2024 Jan Friesse <jfriesse@redhat.com> - 3.1.9-1
+- Resolves: RHEL-65699
+
+- New upstream release (RHEL-65699)
+
 * Tue May 21 2024 Jan Friesse <jfriesse@redhat.com> - 3.1.8-2
 - Resolves: RHEL-24163
 
