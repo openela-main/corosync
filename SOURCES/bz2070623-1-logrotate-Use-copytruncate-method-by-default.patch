@@ -1,0 +1,60 @@
+From 04362046c4a9d7307feb5b68341d567b7d0b94d6 Mon Sep 17 00:00:00 2001
+From: Jan Friesse <jfriesse@redhat.com>
+Date: Tue, 29 Mar 2022 17:09:22 +0200
+Subject: [PATCH] logrotate: Use copytruncate method by default
+
+The reopen lograte method has two main problems:
+1. It does fail when corosync is not running (solvable by
+   adding "|| true")
+2. If (for some reason, like SELinux) cfgtool -L fails, logrotate
+   fails and corosync keeps logging into old file. Added "|| true"
+   makes situation even worse because logrotate removes file but
+   corosync keeps logging into it.
+
+Solution is to install copytruncate logrotate snip by default (and
+keep reopen config file only for reference).
+
+Signed-off-by: Jan Friesse <jfriesse@redhat.com>
+Reviewed-by: Christine Caulfield <ccaulfie@redhat.com>
+---
+ conf/logrotate/Makefile.am        | 7 -------
+ conf/logrotate/corosync-reopen.in | 5 +++++
+ 2 files changed, 5 insertions(+), 7 deletions(-)
+
+diff --git a/conf/logrotate/Makefile.am b/conf/logrotate/Makefile.am
+index 4f7b7536..35efa2de 100644
+--- a/conf/logrotate/Makefile.am
++++ b/conf/logrotate/Makefile.am
+@@ -34,16 +34,9 @@ MAINTAINERCLEANFILES    = Makefile.in
+ 
+ EXTRA_DIST		= corosync-reopen.in corosync-copytruncate.in
+ 
+-if HAVE_QB_LOG_FILE_REOPEN
+-corosync: corosync-reopen.in
+-	$(SED) -e 's#@''LOGDIR@#${LOGDIR}#g' \
+-	       -e 's#@''SBINDIR@#$(sbindir)#g' \
+-	       $< > $@
+-else
+ corosync: corosync-copytruncate.in
+ 	$(SED) -e 's#@''LOGDIR@#${LOGDIR}#g' \
+ 	       $< > $@
+-endif
+ 
+ logrotatecorosyncdir    = ${LOGROTATEDIR}
+ logrotatecorosync_DATA  = corosync
+diff --git a/conf/logrotate/corosync-reopen.in b/conf/logrotate/corosync-reopen.in
+index 839c5dae..730fb741 100644
+--- a/conf/logrotate/corosync-reopen.in
++++ b/conf/logrotate/corosync-reopen.in
+@@ -1,3 +1,8 @@
++# This logrotate method has two main problems and it's kept only for reference:
++# 1. It does fail when corosync is not running (solvable by adding "|| true")
++# 2. If (for some reason) cfgtool -L fails, logrotate fails and corosync keeps
++#    logging into old file. Added "|| true" makes situation even worse
++#    because logrotate removes file but corosync keeps logging into it.
+ @LOGDIR@/corosync.log {
+ 	missingok
+ 	compress
+-- 
+2.27.0
+
