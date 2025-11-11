@@ -1,0 +1,113 @@
+From: Jan Friesse <jfriesse@redhat.com>
+Date: Wed, 11 Jun 2025 17:26:41 +0200
+Subject: [PATCH 1/2] exec: Add support for env STATE_DIRECTORY
+
+Image mode recommendation is to not ship /var/lib subdirectories if
+possible and bootc lint produces warning if not. This was the case
+also for Corosync.
+
+Simplest possible solution seems to implement support for systemd
+unit StateDirectory functionality and not ship /var/lib/corosync
+in rpm.
+
+So patch:
+1. Adds support for reading the environment variable STATE_DIRECTORY
+   which is set by systemd and use it as a default value for
+   system.state_dir configuration option. This is generally useful
+   feature even for non-systemd builds.
+2. Set StateDirectory in service file
+3. Drop /var/lib/corosync directory from RPM for systemd builds
+
+Signed-off-by: Jan Friesse <jfriesse@redhat.com>
+Reviewed-by: Christine Caulfield <ccaulfie@redhat.com>
+---
+ corosync.spec.in         |  2 ++
+ exec/util.c              | 19 +++++++++++++++----
+ init/corosync.service.in |  1 +
+ man/corosync.conf.5      |  4 ++--
+ 4 files changed, 20 insertions(+), 6 deletions(-)
+
+diff --git a/corosync.spec.in b/corosync.spec.in
+index 80040a46..049c585a 100644
+--- a/corosync.spec.in
++++ b/corosync.spec.in
+@@ -207,7 +207,9 @@ fi
+ %{_initrddir}/corosync
+ %{_initrddir}/corosync-notifyd
+ %endif
++%if %{without systemd}
+ %dir %{_localstatedir}/lib/corosync
++%endif
+ %dir %{_localstatedir}/log/cluster
+ %{_mandir}/man7/corosync_overview.7*
+ %{_mandir}/man8/corosync.8*
+diff --git a/exec/util.c b/exec/util.c
+index 8988ab29..795ea5c5 100644
+--- a/exec/util.c
++++ b/exec/util.c
+@@ -174,13 +174,24 @@ int cs_name_tisEqual (cs_name_t *str1, char *str2) {
+ const char *get_state_dir(void)
+ {
+ 	static char path[PATH_MAX] = {'\0'};
+-	char *cmap_state_dir;
++	char *state_dir;
+ 	int res;
+ 
+ 	if (path[0] == '\0') {
+-		if (icmap_get_string("system.state_dir", &cmap_state_dir) == CS_OK) {
+-			res = snprintf(path, PATH_MAX, "%s", cmap_state_dir);
+-			free(cmap_state_dir);
++		if (icmap_get_string("system.state_dir", &state_dir) == CS_OK) {
++			res = snprintf(path, PATH_MAX, "%s", state_dir);
++			free(state_dir);
++		} else if ((state_dir = getenv("STATE_DIRECTORY")) != NULL) {
++			/*
++			 * systemd allows multiple directory names that are
++			 * passed to env variable separated by colon. Support for this feature
++			 * is deliberately not implemented because corosync always
++			 * uses just one state directory and it is unclear what behavior should
++			 * be taken for multiple ones. If reasonable need for
++			 * supporting multiple directories appear, it must be implemented also
++			 * for cmap.
++			 */
++			res = snprintf(path, PATH_MAX, "%s", state_dir);
+ 		} else {
+ 			res = snprintf(path, PATH_MAX, "%s/%s", LOCALSTATEDIR, "lib/corosync");
+ 		}
+diff --git a/init/corosync.service.in b/init/corosync.service.in
+index bd2a48a9..3e3efef8 100644
+--- a/init/corosync.service.in
++++ b/init/corosync.service.in
+@@ -9,6 +9,7 @@ After=network-online.target
+ EnvironmentFile=-@INITCONFIGDIR@/corosync
+ ExecStart=@SBINDIR@/corosync -f $COROSYNC_OPTIONS
+ ExecStop=@SBINDIR@/corosync-cfgtool -H --force
++StateDirectory=corosync
+ Type=notify
+ 
+ # In typical systemd deployments, both standard outputs are forwarded to
+diff --git a/man/corosync.conf.5 b/man/corosync.conf.5
+index 3510ab6b..3bcda7c7 100644
+--- a/man/corosync.conf.5
++++ b/man/corosync.conf.5
+@@ -32,7 +32,7 @@
+ .\" * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ .\" * THE POSSIBILITY OF SUCH DAMAGE.
+ .\" */
+-.TH COROSYNC_CONF 5 2024-07-22 "corosync Man Page" "Corosync Cluster Engine Programmer's Manual"
++.TH COROSYNC_CONF 5 2025-06-12 "corosync Man Page" "Corosync Cluster Engine Programmer's Manual"
+ .SH NAME
+ corosync.conf - corosync executive configuration file
+ 
+@@ -900,7 +900,7 @@ state_dir
+ Existing directory where corosync should chdir into. Corosync stores
+ important state files and blackboxes there.
+ 
+-The default is /var/lib/corosync.
++The default is the value of the environment variable STATE_DIRECTORY or /var/lib/corosync.
+ 
+ .PP
+ Within the
+-- 
+2.43.5
+

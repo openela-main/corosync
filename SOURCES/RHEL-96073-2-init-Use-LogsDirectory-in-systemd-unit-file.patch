@@ -1,0 +1,50 @@
+From 050933cf334ef4ac6a6b4a3988508ca181da34b0 Mon Sep 17 00:00:00 2001
+From: Jan Friesse <jfriesse@redhat.com>
+Date: Thu, 12 Jun 2025 09:40:45 +0200
+Subject: [PATCH 2/2] init: Use LogsDirectory in systemd unit file
+
+Similarly as StateDirectory, this is mainly for image mode.
+/var/log/cluster shouldn't be included in rpm package, so
+use LogsDirectory to make systemd create /var/log/cluster during
+corosync startup.
+
+No code change is needed, because logging to log file is fully
+configured by user in config file so there is no default to read from
+environment variable.
+
+Signed-off-by: Jan Friesse <jfriesse@redhat.com>
+Reviewed-by: Christine Caulfield <ccaulfie@redhat.com>
+---
+ corosync.spec.in         | 2 +-
+ init/corosync.service.in | 1 +
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/corosync.spec.in b/corosync.spec.in
+index 049c585a..7cb70114 100644
+--- a/corosync.spec.in
++++ b/corosync.spec.in
+@@ -209,8 +209,8 @@ fi
+ %endif
+ %if %{without systemd}
+ %dir %{_localstatedir}/lib/corosync
+-%endif
+ %dir %{_localstatedir}/log/cluster
++%endif
+ %{_mandir}/man7/corosync_overview.7*
+ %{_mandir}/man8/corosync.8*
+ %{_mandir}/man8/corosync-blackbox.8*
+diff --git a/init/corosync.service.in b/init/corosync.service.in
+index 3e3efef8..89d67b5e 100644
+--- a/init/corosync.service.in
++++ b/init/corosync.service.in
+@@ -10,6 +10,7 @@ EnvironmentFile=-@INITCONFIGDIR@/corosync
+ ExecStart=@SBINDIR@/corosync -f $COROSYNC_OPTIONS
+ ExecStop=@SBINDIR@/corosync-cfgtool -H --force
+ StateDirectory=corosync
++LogsDirectory=cluster
+ Type=notify
+ 
+ # In typical systemd deployments, both standard outputs are forwarded to
+-- 
+2.43.5
+
