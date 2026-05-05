@@ -15,7 +15,7 @@
 Name: corosync
 Summary: The Corosync Cluster Engine and Application Programming Interfaces
 Version: 3.1.9
-Release: 2%{?dist}
+Release: 2%{?dist}.1
 License: BSD-3-Clause
 URL: http://corosync.github.io/corosync/
 Source0: http://build.clusterlabs.org/corosync/releases/%{name}-%{version}.tar.gz
@@ -23,6 +23,8 @@ Source0: http://build.clusterlabs.org/corosync/releases/%{name}-%{version}.tar.g
 Patch0: RHEL-84612-totemsrp-Check-size-of-orf_token-msg.patch
 Patch1: RHEL-96073-1-exec-Add-support-for-env-STATE_DIRECTORY.patch
 Patch2: RHEL-96073-2-init-Use-LogsDirectory-in-systemd-unit-file.patch
+Patch3: RHEL-163801-totemsrp-Return-error-if-sanity-check-fails.patch
+Patch4: RHEL-163822-totemsrp-Fix-integer-overflow-in-memb_join_sanity.patch
 
 # Runtime bits
 # The automatic dependency overridden in favor of explicit version lock
@@ -293,6 +295,13 @@ network splits)
 %endif
 
 %changelog
+* Fri Apr 10 2026 Jan Friesse <jfriesse@redhat.com> - 3.1.9-2.1
+- Resolves: RHEL-163801
+- Resolves: RHEL-163822
+
+- totemsrp: Return error if sanity check fails (fixes CVE-2026-35091)
+- totemsrp: Fix integer overflow in memb_join_sanity (fixes CVE-2026-35092)
+
 * Mon Jun 16 2025 Jan Friesse <jfriesse@redhat.com> - 3.1.9-2
 - Resolves: RHEL-96073
 
