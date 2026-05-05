@@ -12,20 +12,17 @@
 %bcond_without runautogen
 %bcond_without userflags
 
-%global gitver %{?numcomm:.%{numcomm}}%{?alphatag:.%{alphatag}}%{?dirty:.%{dirty}}
-%global gittarver %{?numcomm:.%{numcomm}}%{?alphatag:-%{alphatag}}%{?dirty:-%{dirty}}
-
 Name: corosync
 Summary: The Corosync Cluster Engine and Application Programming Interfaces
-Version: 3.1.5
-Release: 4%{?gitver}%{?dist}
+Version: 3.1.9
+Release: 2%{?dist}.1
 License: BSD
 URL: http://corosync.github.io/corosync/
-Source0: http://build.clusterlabs.org/corosync/releases/%{name}-%{version}%{?gittarver}.tar.gz
+Source0: http://build.clusterlabs.org/corosync/releases/%{name}-%{version}.tar.gz
 
-Patch0: bz2024652-1-totem-Add-cancel_hold_on_retransmit-config-option.patch
-Patch1: bz2024657-1-totemsrp-Switch-totempg-buffers-at-the-right-time.patch
-Patch2: bz2070623-1-logrotate-Use-copytruncate-method-by-default.patch
+Patch0: RHEL-84616-totemsrp-Check-size-of-orf_token-msg.patch
+Patch1: RHEL-163815-totemsrp-Return-error-if-sanity-check-fails.patch
+Patch2: RHEL-163836-totemsrp-Fix-integer-overflow-in-memb_join_sanity.patch
 
 # Runtime bits
 # The automatic dependency overridden in favor of explicit version lock
@@ -72,13 +69,10 @@ Requires: libxslt
 BuildRequires: readline-devel
 %endif
 BuildRequires: make
+BuildRequires: git
 
 %prep
-%setup -q -n %{name}-%{version}%{?gittarver}
-
-%patch0 -p1 -b .bz2024652-1
-%patch1 -p1 -b .bz2024657-1
-%patch2 -p1 -b .bz2070623-1
+%autosetup -S git_am
 
 %build
 %if %{with runautogen}
@@ -124,7 +118,7 @@ BuildRequires: make
 
 %if %{with dbus}
 mkdir -p -m 0700 %{buildroot}/%{_sysconfdir}/dbus-1/system.d
-install -m 644 %{_builddir}/%{name}-%{version}%{?gittarver}/conf/corosync-signals.conf %{buildroot}/%{_sysconfdir}/dbus-1/system.d/corosync-signals.conf
+install -m 644 %{_builddir}/%{name}-%{version}/conf/corosync-signals.conf %{buildroot}/%{_datadir}/dbus-1/system.d/corosync-signals.conf
 %endif
 
 ## tree fixup
@@ -193,7 +187,7 @@ fi
 %config(noreplace) %{_sysconfdir}/sysconfig/corosync
 %config(noreplace) %{_sysconfdir}/logrotate.d/corosync
 %if %{with dbus}
-%{_sysconfdir}/dbus-1/system.d/corosync-signals.conf
+%{_datadir}/dbus-1/system.d/corosync-signals.conf
 %endif
 %if %{with snmp}
 %{_datadir}/snmp/mibs/COROSYNC-MIB.txt
@@ -297,6 +291,38 @@ network splits)
 %endif
 
 %changelog
+* Fri Apr 10 2026 Jan Friesse <jfriesse@redhat.com> - 3.1.9-2.1
+- Resolves: RHEL-163815
+- Resolves: RHEL-163836
+
+- totemsrp: Return error if sanity check fails (fixes CVE-2026-35091)
+- totemsrp: Fix integer overflow in memb_join_sanity (fixes CVE-2026-35092)
+
+* Wed Mar 26 2025 Jan Friesse <jfriesse@redhat.com> - 3.1.9-2
+- Resolves: RHEL-84616
+
+- totemsrp: Check size of orf_token msg (fixes CVE-2025-30472)
+
+* Fri Nov 15 2024 Jan Friesse <jfriesse@redhat.com> - 3.1.9-1
+- Resolves: RHEL-65699
+
+- New upstream release (RHEL-65699)
+
+* Tue May 21 2024 Jan Friesse <jfriesse@redhat.com> - 3.1.8-2
+- Resolves: RHEL-24163
+
+- Report crypto errors back to cfg reload (RHEL-24163)
+
+* Wed Nov 15 2023 Jan Friesse <jfriesse@redhat.com> - 3.1.8-1
+- Resolves: RHEL-15264
+
+- New upstream release (RHEL-15264)
+
+* Tue Nov 15 2022 Jan Friesse <jfriesse@redhat.com> - 3.1.7-1
+- Resolves: rhbz#2135861
+
+- New upstream release (rhbz#2135861)
+
 * Thu Mar 31 2022 Jan Friesse <jfriesse@redhat.com> - 3.1.5-4
 - Resolves: rhbz#2070623
 
