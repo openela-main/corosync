@@ -23,10 +23,13 @@
 Name: corosync
 Summary: The Corosync Cluster Engine and Application Programming Interfaces
 Version: 3.1.8
-Release: 1%{?gitver}%{?dist}
+Release: 1%{?gitver}%{?dist}.1
 License: BSD
 URL: http://corosync.github.io/corosync/
 Source0: http://build.clusterlabs.org/corosync/releases/%{name}-%{version}%{?gittarver}.tar.gz
+
+Patch0: RHEL-163805-totemsrp-Return-error-if-sanity-check-fails.patch
+Patch1: RHEL-163826-totemsrp-Fix-integer-overflow-in-memb_join_sanity.patch
 
 %if %{with spausedd}
 Source1: https://github.com/jfriesse/spausedd/releases/download/%{spausedd_version}/spausedd-%{spausedd_version}.tar.gz
@@ -90,6 +93,9 @@ BuildRequires: pkgconfig(vmguestlib)
 %else
 %setup -q -n %{name}-%{version}%{?gittarver}
 %endif
+
+%patch0 -p1 -b .RHEL-163805
+%patch1 -p1 -b .RHEL-163826
 
 %build
 %if %{with runautogen}
@@ -389,6 +395,13 @@ fi
 %endif
 
 %changelog
+* Fri Apr 10 2026 Jan Friesse <jfriesse@redhat.com> - 3.1.8-1.1
+- Resolves: RHEL-163805
+- Resolves: RHEL-163826
+
+- totemsrp: Return error if sanity check fails (fixes CVE-2026-35091)
+- totemsrp: Fix integer overflow in memb_join_sanity (fixes CVE-2026-35092)
+
 * Wed Nov 15 2023 Jan Friesse <jfriesse@redhat.com> - 3.1.8-1
 - Resolves: RHEL-15263
 
