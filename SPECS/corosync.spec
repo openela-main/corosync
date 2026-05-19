@@ -14,15 +14,11 @@
 
 Name: corosync
 Summary: The Corosync Cluster Engine and Application Programming Interfaces
-Version: 3.1.9
-Release: 2%{?dist}.1
-License: BSD
+Version: 3.1.10
+Release: 1%{?dist}
+License: BSD-3-Clause
 URL: http://corosync.github.io/corosync/
-Source0: http://build.clusterlabs.org/corosync/releases/%{name}-%{version}.tar.gz
-
-Patch0: RHEL-84616-totemsrp-Check-size-of-orf_token-msg.patch
-Patch1: RHEL-163815-totemsrp-Return-error-if-sanity-check-fails.patch
-Patch2: RHEL-163836-totemsrp-Fix-integer-overflow-in-memb_join_sanity.patch
+Source0: https://github.com/%{name}/%{name}/releases/download/v%{version}/%{name}-%{version}%{?gittarver}.tar.gz
 
 # Runtime bits
 # The automatic dependency overridden in favor of explicit version lock
@@ -199,8 +195,10 @@ fi
 %{_initrddir}/corosync
 %{_initrddir}/corosync-notifyd
 %endif
+%if %{without systemd}
 %dir %{_localstatedir}/lib/corosync
 %dir %{_localstatedir}/log/cluster
+%endif
 %{_mandir}/man7/corosync_overview.7*
 %{_mandir}/man8/corosync.8*
 %{_mandir}/man8/corosync-blackbox.8*
@@ -291,12 +289,10 @@ network splits)
 %endif
 
 %changelog
-* Fri Apr 10 2026 Jan Friesse <jfriesse@redhat.com> - 3.1.9-2.1
-- Resolves: RHEL-163815
-- Resolves: RHEL-163836
+* Tue Nov 18 2025 Jan Friesse <jfriesse@redhat.com> - 3.1.10-1
+- Resolves: RHEL-122942
 
-- totemsrp: Return error if sanity check fails (fixes CVE-2026-35091)
-- totemsrp: Fix integer overflow in memb_join_sanity (fixes CVE-2026-35092)
+- New upstream release (RHEL-122942)
 
 * Wed Mar 26 2025 Jan Friesse <jfriesse@redhat.com> - 3.1.9-2
 - Resolves: RHEL-84616
