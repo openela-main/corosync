@@ -15,13 +15,14 @@
 Name: corosync
 Summary: The Corosync Cluster Engine and Application Programming Interfaces
 Version: 3.1.10
-Release: 1%{?dist}.1
+Release: 1%{?dist}.2
 License: BSD-3-Clause
 URL: http://corosync.github.io/corosync/
 Source0: https://github.com/%{name}/%{name}/releases/download/v%{version}/%{name}-%{version}%{?gittarver}.tar.gz
 
 Patch0: RHEL-163802-totemsrp-Return-error-if-sanity-check-fails.patch
 Patch1: RHEL-163823-totemsrp-Fix-integer-overflow-in-memb_join_sanity.patch
+Patch2: RHEL-251541-totempg-Replace-assert-with-check-in-deliver_fn.patch
 
 # Runtime bits
 # The automatic dependency overridden in favor of explicit version lock
@@ -292,6 +293,11 @@ network splits)
 %endif
 
 %changelog
+* Fri Sep 04 2026 Jan Friesse <jfriesse@redhat.com> - 3.1.10-1.2
+- Resolves: RHEL-251541
+
+- totempg: Replace assert with check in deliver_fn (fixes CVE-2026-81665)
+
 * Thu Apr 09 2026 Jan Friesse <jfriesse@redhat.com> - 3.1.10-1.1
 - Resolves: RHEL-163802
 - Resolves: RHEL-163823
